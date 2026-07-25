@@ -9,45 +9,73 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @State private var manager = ContainerManager()
+    @State private var selection: Set<String> = []
+    
     var body: some View {
         NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
+            List(selection: $selection) {
+                Section("Management") {
+                    Label("Containers", systemImage: "shippingbox").tag("containers")
+                    Label("Images", systemImage: "opticaldisc").tag("images")
                 }
             }
+            .navigationTitle("Container Manager")
         } detail: {
-            Text("Select an item")
+            ContainerTableView(manager: manager, selection: $selection)
+        }
+        .task {
+            await manager.refresh()
         }
     }
+}
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+struct ContainerTableView: View {
+    @Bindable var manager: ContainerManager
+    @Binding var selection: Set<String>
+    
+    var body: some View {
+        Table(manager.containers, selection: $selection) {
+            TableColumn("ID") { (item: ContainerItem) in  // ✅ Explicit type
+                   Text(item.id.prefix(12))
+                       .font(.system(.body, design: .monospaced))
+               }
+               
+               TableColumn("Image") { (item: ContainerItem) in  // ✅ Explicit type
+                   Text(item.imageReference)
+               }
+               
+               TableColumn("State") { (item: ContainerItem) in  // ✅ Explicit type
+                   Text(item.state.capitalized)
+                       .foregroundStyle(item.state == "running" ? .green : .gray)
+               }
+               
+               TableColumn("IP Address") { (item: ContainerItem) in  // ✅ Explicit type
+                   Text(item.ipv4Address ?? "—")
+                       .font(.system(.body, design: .monospaced))
+               }
+               
+               TableColumn("Memory") { (item: ContainerItem) in  // ✅ Explicit type
+                   Text(item.configuration.resources.memoryFormatted)
+               }
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    Task { await manager.refresh() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(manager.isLoading)
+                
+                Button {
+                    if let id = selection.first {
+                        Task { await manager.stopContainer(id: id)}
+                    }
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .disabled(selection.isEmpty)
             }
         }
     }
