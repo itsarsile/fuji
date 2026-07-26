@@ -11,10 +11,12 @@ import SwiftData
 struct ContentView: View {
     @State private var manager = ContainerManager()
     @State private var selection: Set<String> = []
+    @State private var activeTab: String = "containers"
+    @State private var selectedContainerIDs: Set<String> = []
     
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: $activeTab) {
                 Section("Management") {
                     Label("Containers", systemImage: "shippingbox").tag("containers")
                     Label("Images", systemImage: "opticaldisc").tag("images")
@@ -22,7 +24,32 @@ struct ContentView: View {
             }
             .navigationTitle("Container Manager")
         } detail: {
-            ContainerTableView(manager: manager, selection: $selection)
+            Group {
+                switch activeTab {
+                case "containers":
+                    ZStack {
+                        ContainerTableView(manager: manager, selection: $selectedContainerIDs)
+                        if manager.isLoading {
+                            ProgressView {
+                                Text("Loading containers...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .controlSize(.large)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(8)
+                        }
+                    }
+                case "images":
+                    ContentUnavailableView(
+                        "Images Coming Soon",
+                        systemImage: "opticaldisc",
+                        description: Text("Run `container image ls --format json`")
+                    )
+                default:
+                    EmptyView()
+                }
+            }
         }
         .task {
             await manager.refresh()
